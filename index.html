@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Omkar AI</title>
+
+<style>
+body {
+  margin:0;
+  font-family: system-ui;
+  background:#0f0f0f;
+  color:white;
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
+
+header {
+  padding:15px;
+  background:#171717;
+  border-bottom:1px solid #2a2a2a;
+  font-weight:bold;
+}
+
+.chat {
+  flex:1;
+  overflow-y:auto;
+  padding:15px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.msg {
+  max-width:75%;
+  padding:12px;
+  border-radius:10px;
+  animation:fade 0.2s ease;
+}
+
+.user { background:#2a2a2a; align-self:flex-end; }
+.bot { background:#1a1a1a; align-self:flex-start; }
+
+@keyframes fade {
+  from {opacity:0; transform:translateY(10px);}
+  to {opacity:1; transform:translateY(0);}
+}
+
+.controls {
+  display:flex;
+  gap:10px;
+  padding:10px;
+  border-top:1px solid #2a2a2a;
+}
+
+input {
+  flex:1;
+  padding:10px;
+  border-radius:8px;
+  border:none;
+  background:#1f1f1f;
+  color:white;
+}
+
+button {
+  padding:10px 15px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.mic {
+  background:#3b82f6;
+}
+
+.mic.listening {
+  background:red;
+}
+
+.send {
+  background:#444;
+}
+
+.status {
+  font-size:12px;
+  padding-left:10px;
+  color:#888;
+}
+</style>
+</head>
+
+<body>
+
+<header>Omkar AI</header>
+
+<div class="chat" id="chat"></div>
+
+<div class="status" id="status">Idle</div>
+
+<div class="controls">
+  <input id="input" placeholder="Type or use mic..." />
+  <button class="send" onclick="sendText()">Send</button>
+  <button class="mic" id="micBtn" onclick="toggleMic()">🎤</button>
+</div>
+
+<script>
+const chat = document.getElementById("chat");
+const statusEl = document.getElementById("status");
+const micBtn = document.getElementById("micBtn");
+
+let recognition;
+let listening = false;
+
+function addMsg(text, type) {
+  const div = document.createElement("div");
+  div.className = "msg " + type;
+  div.innerText = text;
+  chat.appendChild(div);
+  div.scrollIntoView();
+}
+
+function speak(text) {
+  const utter = new SpeechSynthesisUtterance(text);
+  speechSynthesis.speak(utter);
+}
+
+async function sendToAI(text) {
+  statusEl.innerText = "Thinking...";
+  addMsg(text, "user");
+
+  const res = await fetch("/api/chat", {
+    method:"POST",
+    body: JSON.stringify({ message: text })
+  });
+
+  const data = await res.json();
+
+  addMsg(data.reply, "bot");
+  speak(data.reply);
+  statusEl.innerText = "Idle";
+}
+
+function sendText() {
+  const input = document.getElementById("input");
+  if (!input.value) return;
+  sendToAI(input.value);
+  input.value="";
+}
+
+function toggleMic() {
+  if (!('webkitSpeechRecognition' in window)) {
+    alert("Speech not supported");
+    return;
+  }
+
+  if (!recognition) {
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = (e) => {
+      let transcript = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript;
+      }
+      statusEl.innerText = "Listening: " + transcript;
+
+      if (e.results[e.results.length-1].isFinal) {
+        sendToAI(transcript);
+      }
+    };
+
+    recognition.onend = () => {
+      listening = false;
+      micBtn.classList.remove("listening");
+      statusEl.innerText = "Idle";
+    };
+  }
+
+  if (!listening) {
+    recognition.start();
+    listening = true;
+    micBtn.classList.add("listening");
+    statusEl.innerText = "Listening...";
+  } else {
+    recognition.stop();
+    listening = false;
+  }
+}
+</script>
+
+</body>
+</html>
